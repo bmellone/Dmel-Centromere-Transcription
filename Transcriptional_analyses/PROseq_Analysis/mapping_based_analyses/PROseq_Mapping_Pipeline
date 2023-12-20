@@ -1,0 +1,85 @@
+#!/bin/bash
+#SBATCH --job-name=Align2dmel
+#SBATCH -n 1
+#SBATCH -N 1
+#SBATCH -c 24
+#SBATCH --mem=150G
+#SBATCH --partition=general
+#SBATCH --qos=general
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=asna.amjad@uconn.edu
+#SBATCH -o %x_%j.out
+#SBATCH -e %x_%j.err
+
+echo `hostname`
+
+module load cutadapt
+module load fastqc
+module load bowtie2/2.3.5.1
+module load samtools/1.16.1
+module load bedtools
+module load ucsc_genome
+module load GenomeBrowser/20180626 
+mkdir fastq_Trim
+
+INpath=/path/to/input/directory/
+INfileprefix=SAMPLE1
+DmelanogasterIndex=/labs/Mellone/Asna/Assembly/bowtie2_Index/dmel_scaffold2_plus0310.fasta
+HumangenomeIndex=/isg/shared/databases/alignerIndex/animal/hg38_ucsc/hg38_bowtie2/Human_genome
+OUTpath=/path/to/output/directory/
+
+################## PRE-PROCESSING ##################
+fastqc ${INpath}${INfileprefix}.fastq
+cutadapt -j 24 -q 20 -m 20 -a TGGAATTCTCGGGTGCCAAGG -A GATCGTCGGACTGTAGAACTCTGAAC -o ${INpath}${INfileprefix}_R1_trimmed.fastq -p $ {INpath}${INfileprefix}_R2_trimmed.fastq ${INpath}${INfileprefix}_R1.fastq ${INpath}${INfileprefix}_R2.fastq
+fastqc ${INpath}${INfileprefix}_trimmed.fastq
+fastx_reverse_complement -Q33 -v -i ${INpath}${INfileprefix}_R1_trimmed.fastq -o ${INpath}${INfileprefix}_R1_trimmed_RC.fastq
+fastx_reverse_complement -Q33 -v -i ${INpath}${INfileprefix}_R2_trimmed.fastq -o ${INpath}${INfileprefix}_R2_trimmed_RC.fastq
+################## FILTERING OUT HeLa Cells SPIKE-INS IN PROSEQ DATA ONLY ##################
+
+bowtie2 -p 24 -t --very-sensitive -x ${HumangenomeIndex} -1 ${INpath}${INfileprefix}_R1_trimmed_RC.fastq -2 ${INpath}${INfileprefix}_R2_trimmed_RC.fastq | samtools view -@ 24 -bS | samtools sort -O bam -o ${INpath}${INfileprefix}_trimmed_RC_BT2-vs-Hg_sort.bam
+
+################## PULL OUT UNMAPPED PROseq READS AND CONVERT TO FASTQ ######################
+samtools view -@ 20 -b -f 4 -o ${INpath}${INfileprefix}_trimmed_RC_sort_unmapped2HG.bam ${INpath}${INfileprefix}_trimmed_RC_BT2-vs-Hg_sort.bam                  
+samtools fastq ${INpath}${INfileprefix}_trimmed_RC_sort_unmapped.bam > ${INpath}${INfileprefix}_trimmed_RC_sort_unmapped2Hg.fastq
+
+################## MAPPING TO DROSOPHILA HET-ENRICHED ASSEMBLY (BT2 DF & BT2 K100) ##################
+bowtie2 -p 24 -t -x ${DmelanogasterIndex} -1 ${INpath}${INfileprefix}_R1_trimmed_RC_sort_unmapped2Hg.fastq -2 ${INpath}${INfileprefix}_R2_trimmed_RC_sort_unmapped2Hg.fastq | samtools view -@ 24 -bS | samtools sort -O bam -o ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort.bam
+bowtie2 -p 24 -t -k 100 -x ${DmelanogasterIndex} -1 ${INpath}${INfileprefix}_R1_trimmed_RC_sort_unmapped2Hg.fastq -2 ${INpath}${INfileprefix}_R2_trimmed_RC_sort_unmapped2Hg.fastq | samtools view -@ 24 -bS | samtools sort -O bam -o ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-K100_mapped2DM_sort.bam
+
+################# CONVERT SORT.BAM TO BEDGRAPGH, SORT, TO BIGWIG FOR VIEWING ##################
+ bedtools genomecov -bg -ibam ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort.bam > ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM.bedgraph
+export LC_COLLATE=C
+sort -k1,1 -k2,2n ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM.bedgraph > ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort.bedgraph             
+bedGraphToBigWig ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort.bedgraph ~/assembly/contigs.size ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM.bigwig
+
+################ CONVERT SORT.BAM TO .BED FOR FILTERING THROUGH UNIQUE ASSEMBLY KMERS ################
+bedtools bamtobed -i ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort.bam > ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort.bed 
+
+################ CHECK INSERT SIZE ###############
+mkdir insert
+module load java
+module load picard
+java -Xmx10g -jar /isg/shared/apps/picard/picard-tools-2.9.2/picard.jar CollectInsertSizeMetrics \
+      I=${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort.bam \
+      O=${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort_insert_size_metrics.txt \
+      H=${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort_insert_size_histogram.pdf \
+      M=0.5
+      
+################## FILTER MAPPED READS THROUGH MERYL UNIQUE ASSEMBLY KMERS ##################
+### Overlap .bed with Meryl unique 21mers:
+overlapSelect -overlapBases=21 /home/FCAM/aamjad/Meryl_kmers/dmel_assembly_21mer_SINGLEv1.3.meryl_merge.bed ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort.bed ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge.bed 
+
+### For 21mer overlaps: convert bed to bedgraph, sort, then to bigwig for viewing:
+bedtools genomecov -bg -i ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge.bed -g contigs.size > ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge.bedgraph
+        export LC_COLLATE=C
+    	sort -k1,1 -k2,2n ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge.bedgraph > ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge-sort.bedgraph
+        bedGraphToBigWig ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge-sort.bedgraph contigs.size ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge-sort.bigwig
+
+### Overlap .bed with Meryl unique 51mers:
+overlapSelect -overlapBases=51 /home/FCAM/aamjad/Meryl_kmers/dmel_assembly_51mer_SINGLEv1.3.meryl_merge.bed ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort.bed ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq51mer-merge.bed 
+
+### For 51mer overlaps: convert bed to bedgraph, sort, then to bigwig for viewing:
+bedtools genomecov -bg -i ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge.bed -g contigs.size > ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge.bedgraph
+        export LC_COLLATE=C
+    	sort -k1,1 -k2,2n ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq51mer-merge.bedgraph > ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq51mer-merge-sort.bedgraph
+        bedGraphToBigWig ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq51mer-merge-sort.bedgraph contigs.size ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq51mer-merge-sort.bigwig
