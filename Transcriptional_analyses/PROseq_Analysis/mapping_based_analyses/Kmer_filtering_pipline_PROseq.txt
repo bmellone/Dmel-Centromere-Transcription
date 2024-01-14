@@ -1,34 +1,69 @@
 ####Unique kmer filtering pipeline####
 ###The following steps were applied to the PROseq mapped data
 
-###1: Convert PROseq sort.bam to bed for overlapSelect with unique kmers:  
-    ##Version: bedtools/2.29.0
-    ##Command: bedtools bamtobed -i mapped.bam > mapped.bed
+#bedtools bamtobed -i ../PROseq_Trim_R1_bt2-k100-Dmel_sort.bam > PROseq_RevComp_Trim_SE_bt2-k100-Dmel.bed
 
-###2a: Overlap PROseq data with Meryl unique 21mers:
-	##Version: GenomeBrowser/20180626
-	##Usage: overlapSelect -overlapBases=[# of bases required to overlap to retain read] unique_kmers.bed reads-aligned.bed reads-aligned.over.unique-kmers.bed 
-	##Command: overlapSelect -overlapBases=21 Dmel.k21.single.mrg.bed mapped.bed mapped.over.Dmel-k21-single-meryl-mrg.bed 
-	
-###2b: Overlap PROseq data with Meryl unique 51mers:
-	##Version: GenomeBrowser/20180626
-	##Command: overlapSelect -overlapBases=51 Dmel.single.k51.mrg.bed mapped.bed mapped.over.Dmel-k51-single-meryl-mrg.bed 
-	
-###3a: For 21mer overlaps, bed > bedgraph > bigwig for viewing in browser:
-	##Versions: GenomeBrowser/20180626, bedtools/2.29.0
-    ##bedgraphtobigwig documentation: http://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/
-	##Commands: 
-		#bedtools genomecov -bg -i mapped.over.Dmel-k21-single-meryl-mrg.bed -g Dmel.0_seqLengths.genome > mapped.over.dmel-k21-single-meryl-mrg.bedgraph
-    	#export LC_COLLATE=C
-    	#sort -k1,1 -k2,2n mapped.over.Dmel-k21-single-meryl-mrg.bedgraph > mapped.over.Dmel-k21-single-meryl-mrg_sorted.bedgraph
-    	#bedGraphToBigWig mapped.over.Dmel-k21-single-meryl-mrg_sorted.bedgraph Dmel.0_seqLengths.genome mapped.over.Dmel-k21-single-meryl-mrg_sorted.bigwig
+### Step 3b: Get 3' ends (position of polymerase) & convert to bedgraph
+################################################################################
+#cat PROseq_RevComp_Trim_SE_bt2-k100-Dmel.bed |
+#awk '{OFS="\t"} $6=="+" {print $1,($3-1),$3,$4,$5"_"($3-$2),$6}; $6=="-" {print $1,$2,($2+1),$4,$5"_"($3-$2),$6}' |
+#       sort --parallel 12 -k1,1 -k2,2n > PROseq_RevComp_Trim_SE_bt2-k100-Dmel_3ends.bed
 
-###3b: For 51mer overlaps, bed > bedgraph > bigwig for viewing in browser:
-	##Versions: GenomeBrowser/20180626, bedtools/2.29.0
-    ##bedgraphtobigwig documentation: http://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/
-	##Commands: 
-		#bedtools genomecov -bg -i mapped.over.Dmel-k51-single-meryl-mrg.bed -g Dmel.0_seqLengths.genome > mapped.over.Dmel-k51-single-meryl-mrg.bedgraph
-    	#export LC_COLLATE=C
-    	#sort -k1,1 -k2,2n mapped.over.Dmel-k51-single-meryl-mrg.bedgraph > mapped.over.Dmel-k51-single-meryl-mrg_sorted.bedgraph
-    	#bedGraphToBigWig mapped.over.Dmel-k51-single-meryl-mrg_sorted.bedgraph Dmel.0_seqLengths.genome mapped.over.Dmel-k51-single-meryl-mrg_sorted.bigwig
+##Convert to bedgraph:
+#awk '$6 == "+"' PROseq_RevComp_Trim_SE_bt2-k100-Dmel_3ends.bed | genomeCoverageBed -3 -i /dev/stdin -bg -g contigs.size > \
+#       PROseq_RevComp_Trim_SE_bt2-k100-Dmel_3ends_plus.bedgraph
+#awk '$6 == "-"' PROseq_RevComp_Trim_SE_bt2-k100-Dmel_3ends.bed | genomeCoverageBed -3 -i /dev/stdin -bg -g contigs.size > \
+#       PROseq_RevComp_Trim_SE_bt2-k100-Dmel_3ends_m.bedgraph
+#awk '{OFS="\t"}{ $4=$4*-1; print }' PROseq_RevComp_Trim_SE_bt2-k100-Dmel_3ends_m.bedgraph > PROseq_RevComp_Trim_SE_bt2-k100-Dmel_3ends_minus.bedgraph
 
+################################################################################
+### Step 3d: OverlapSelect read pairs with unique kmers, get 3' end per pair, & convert to bedgraph
+################################################################################
+#overlapSelect -overlapBases=51 /home/FCAM/aamjad/Meryl1.4.1Kmers/dmel_scaffold2_plus0310_51mer_SINGLEv1.4.1.meryl_merge.bed \
+#        PROseq_RevComp_Trim_SE_bt2-k100-Dmel.bed \
+#        PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.51mer.single.meryl.merged.bed 
+
+##Get single-bp coords (start of R1):
+#cat PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.51mer.single.meryl.merged.bed |
+#       awk '{OFS="\t"} $6=="+" {print $1,($3-1),$3,$4,$5"_"($3-$2),$6}; $6=="-" {print $1,$2,($2+1),$4,$5"_"($3-$2),$6}' |
+#       sort --parallel 12 -k1,1 -k2,2n > PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.51mer.single.meryl.merged_3ends.bed
+
+##Convert to bedgraph:
+#awk '$6 == "+"' PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.51mer.single.meryl.merged_3ends.bed | genomeCoverageBed -3 -i /dev/stdin -bg -g contigs.size > \
+#       PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.51mer.single.meryl.merged_3ends_plus.bedgraph
+#awk '$6 == "-"' PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.51mer.single.meryl.merged_3ends.bed | genomeCoverageBed -3 -i /dev/stdin -bg -g contigs.size > \
+#       PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.51mer.single.meryl.merged_3ends_m.bedgraph
+#awk '{OFS="\t"}{ $4=$4*-1; print }' PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.51mer.single.meryl.merged_3ends_m.bedgraph > \
+#       PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.51mer.single.meryl.merged_3ends_minus.bedgraph
+
+############# Bt2 SE K-100 ###############
+#export LC_COLLATE=C
+#       sort -k1,1 -k2,2n PROseq_RevComp_Trim_SE_bt2-k100-Dmel_3ends_plus.bedgraph > PROseq_RevComp_Trim_SE_bt2-k100-Dmel_3ends_plus_sort.bedgraph
+#       sort -k1,1 -k2,2n PROseq_RevComp_Trim_SE_bt2-k100-Dmel_3ends_minus.bedgraph > PROseq_RevComp_Trim_SE_bt2-k100-Dmel_3ends_minus_sort.bedgraph 
+
+#bedGraphToBigWig PROseq_RevComp_Trim_SE_bt2-k100-Dmel_3ends_plus_sort.bedgraph contigs.size PROseq_RevComp_Trim_SE_bt2-k100-Dmel_3ends_plus.bigwig
+#bedGraphToBigWig PROseq_RevComp_Trim_SE_bt2-k100-Dmel_3ends_minus_sort.bedgraph contigs.size PROseq_RevComp_Trim_SE_bt2-k100-Dmel_3ends_minus.bigwig
+
+############### SE K-100 21-mer ###############
+export LC_COLLATE=C
+sort -k1,1 -k2,2n PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.21mer.single.meryl.merged_3ends_plus.bedgraph > \
+        PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.21mer.single.meryl.merged_3ends_plus_sort.bedgraph    
+sort -k1,1 -k2,2n PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.21mer.single.meryl.merged_3ends_minus.bedgraph > \
+        PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.21mer.single.meryl.merged_3ends_minus_sort.bedgraph
+
+bedGraphToBigWig PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.21mer.single.meryl.merged_3ends_plus_sort.bedgraph contigs.size \
+        PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.21mer.single.meryl.merged_3ends_plus.bigwig
+bedGraphToBigWig PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.21mer.single.meryl.merged_3ends_minus_sort.bedgraph contigs.size \
+        PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.21mer.single.meryl.merged_3ends_minus.bigwig
+
+############### SE K-100 51-mer ###############
+export LC_COLLATE=C
+sort -k1,1 -k2,2n PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.51mer.single.meryl.merged_3ends_plus.bedgraph > \
+        PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.51mer.single.meryl.merged_3ends_plus_sort.bedgraph
+sort -k1,1 -k2,2n PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.51mer.single.meryl.merged_3ends_minus.bedgraph > \
+        PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.51mer.single.meryl.merged_3ends_minus_sort.bedgraph
+
+bedGraphToBigWig PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.51mer.single.meryl.merged_3ends_plus_sort.bedgraph contigs.size \
+        PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.51mer.single.meryl.merged_3ends_plus.bigwig
+bedGraphToBigWig PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.51mer.single.meryl.merged_3ends_minus_sort.bedgraph contigs.size \
+        PROseq_RevComp_Trim_SE_bt2-k100-Dmel.over.FullAsm.51mer.single.meryl.merged_3ends_minus.bigwig
