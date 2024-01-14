@@ -62,34 +62,26 @@ sort -k1,1 -k2,2n RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_minus.bedgraph > RNAse
 bedGraphToBigWig RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_plus_sort.bedgraph contigs.size RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_plus.bigwig
 bedGraphToBigWig RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_minus_sort.bedgraph contigs.size RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_minus.bigwig
 
-bedtools bamtobed -i RNAseq-sample_cutadapt-q20-m100_BT2-Df-Dmel-F1548_sort.bam > RNAseq-sample_cutadapt-q20-m100_BT2-Df-Dmel-F1548.bed
-bedtools bamtobed -i RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_sort.bam > RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548.bed
+### Convert bam to bed file ###
+bedtools bamtobed -i RNAseq_Emb_q20-m100_BT2-Df-Dmel-F1548_sort.bam > RNAseq_Emb_q20-m100_BT2-Df-Dmel-F1548.bed
+bedtools bamtobed -i RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_sort.bam > RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548.bed
 
 #### Overlap 51-mer Meryl ####
 ##############################
+overlapSelect -overlapBases=51 dmel_assembly_51mer_SINGLEv1.3.meryl_merge.bed RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548.bed \
+        RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge.bed
 
-overlapSelect -overlapBases=51 /home/FCAM/aamjad/Meryl_kmers_new/dmel_assembly_51mer_SINGLEv1.3.meryl_merge.bed RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548.bed \
-        RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge.bed
 #### Split K100 filtered Files ####
 ###################################
-
-awk '$6 == "+"' RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge.bed | genomeCoverageBed -i contigs.size > \
-        RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_plus.bedgraph
-awk '$6 == "-"' RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge.bed | genomeCoverageBed -i contigs.size > \
-        RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_minus.bedgraph
-
-awk '{ $4=$4*-1; print }' RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_minus.bedgraph > \
-        RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_minus_mod.bedgraph
+awk '$6 == "+"' RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge.bed | genomeCoverageBed -i contigs.size > RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_plus.bedgraph
+awk '$6 == "-"' RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge.bed | genomeCoverageBed -i contigs.size > RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_m.bedgraph
+awk '{ $4=$4*-1; print }' RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_m.bedgraph > RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_minus.bedgraph
 
 export LC_COLLATE=C
-sort -k1,1 -k2,2n RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_plus.bedgraph > \
-        RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_plus_sort.bedgraph
+sort -k1,1 -k2,2n RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_plus.bedgraph > RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_plus_sort.bedgraph
+sort -k1,1 -k2,2n RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_minus.bedgraph > RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_minus_sort.bedgraph
 
-sort -k1,1 -k2,2n RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_minus_mod.bedgraph > \
-        RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_minus_sort.bedgraph
-
-bedGraphToBigWig RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_plus_sort.bedgraph contigs.size \
-        RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_plus.bigwig
-
-bedGraphToBigWig RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_plus_minus.bedgraph contigs.size \
-        RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_minus.bigwig
+bedGraphToBigWig RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_plus_sort.bedgraph contigs.size \
+        RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_plus.bigwig
+bedGraphToBigWig RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_minus_sort.bedgraph contigs.size \
+        RNAseq_Emb_q20-m100_BT2-K100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_minus.bigwig
