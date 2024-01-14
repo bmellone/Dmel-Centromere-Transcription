@@ -93,6 +93,14 @@ bowtie2 -p 24 -t -k 100 -x /labs/Mellone/Asna/Assembly/bt2_Index/dmel_scaffold2_
        -U PROseq_Trim_R1_RC_BT2-vs-Hg_sort_unmapped.fastq | \
        samtools view -@ 24 -bS | samtools sort -@ 24 -m 3G -O bam -o PROseq_Trim_RC_R1_bt2-k100-Dmel_sort.bam
 
-### sort.bam to bed: 
+### sort bam to bed
 bedtools bamtobed -i PROseq_Trim_RC_R1_bt2-k100-Dmel_sort.bam > PROseq_Trim_RC_R1_bt2-k100-Dmel.bed
 
+### Convert to bedgraph then bigwigs for viewing
+bedtools genomecov -strand + -bg -i PROseq_Trim_RC_R1_bt2-k100-Dmel.bed -g contigs.size > PROseq_Trim_RC_R1_bt2-k100-Dmel_plus.bedgraph
+bedtools genomecov -strand - -bg -i PROseq_Trim_RC_R1_bt2-k100-Dmel.bed -g contigs.size > PROseq_Trim_RC_R1_bt2-k100-Dmel_minus.bedgraph
+export LC_COLLATE=C
+  sort -k1,1 -k2,2n PROseq_Trim_RC_R1_bt2-k100-Dmel_plus.bedgraph > PROseq_Trim_RC_R1_bt2-k100-Dmel_plus_sort.bedgraph
+  sort -k1,1 -k2,2n PROseq_Trim_RC_R1_bt2-k100-Dmel_minus.bedgraph > PROseq_Trim_RC_R1_bt2-k100-Dmel_minus_sort.bedgraph
+bedGraphToBigWig PROseq_Trim_RC_R1_bt2-k100-Dmel_plus_sort.bedgraph contigs.size PROseq_Trim_RC_R1_bt2-k100-Dmel_plus.bigwig
+bedGraphToBigWig PROseq_Trim_RC_R1_bt2-k100-Dmel_minus_sort.bedgraph contigs.size PROseq_Trim_RC_R1_bt2-k100-Dmel_minus.bigwig
