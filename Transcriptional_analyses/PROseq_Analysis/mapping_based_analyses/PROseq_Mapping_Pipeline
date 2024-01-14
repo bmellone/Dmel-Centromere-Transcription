@@ -27,12 +27,15 @@ INfileprefix=SAMPLE1
 DmelanogasterIndex=/labs/Mellone/Asna/Assembly/bowtie2_Index/dmel_scaffold2_plus0310.fasta
 OUTpath=/path/to/output/directory/
 
-################## PRE-PROCESSING ##################
+################## Bowtie2 Default Mapping Pipeline ##################
+######################################################################
+
+### PRE-PROCESSING ###
 fastqc ${INpath}${INfileprefix}.fastq
 cutadapt -j 24 -q 20 -m 20 -a TGGAATTCTCGGGTGCCAAGG -A GATCGTCGGACTGTAGAACTCTGAAC -o ${INpath}${INfileprefix}_R1_trim.fastq.gz -p $ {INpath}${INfileprefix}_R2_Trim.fastq.gz \
   ${INpath}${INfileprefix}_R1.fastq.gz ${INpath}${INfileprefix}_R2.fastq.gz
 
-################## FILTERING OUT HeLa Cells SPIKE-INS IN PROSEQ DATA ONLY ##################
+### FILTERING OUT HeLa Cells SPIKE-INS IN PROSEQ DATA ONLY ###
 bowtie2 -p 24 -t -x Dmel_hg38_combine -1 fastq_Trim/ProSeq_5_R1_Trim.fastq.gz \
        -2 fastq_Trim/ProSeq_5_R2_Trim.fastq.gz | \
        samtools view -@ 24 -F 1548 -bS | \
@@ -72,51 +75,6 @@ export LC_COLLATE=C
 bedGraphToBigWig PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_plus_sort.bedgraph contigs.size PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_plus.bigwig
 bedGraphToBigWig PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_minus_sort.bedgraph contigs.size PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_minus.bigwig  
 
-
-################## PULL OUT UNMAPPED PROseq READS AND CONVERT TO FASTQ ######################
-samtools view -@ 20 -b -f 4 -o ${INpath}${INfileprefix}_trimmed_RC_sort_unmapped2HG.bam ${INpath}${INfileprefix}_trimmed_RC_BT2-vs-Hg_sort.bam                  
-samtools fastq ${INpath}${INfileprefix}_trimmed_RC_sort_unmapped.bam > ${INpath}${INfileprefix}_trimmed_RC_sort_unmapped2Hg.fastq
-
-################## MAPPING TO DROSOPHILA HET-ENRICHED ASSEMBLY (BT2 DF & BT2 K100) ##################
-bowtie2 -p 24 -t -x ${DmelanogasterIndex} -1 ${INpath}${INfileprefix}_R1_trimmed_RC_sort_unmapped2Hg.fastq -2 ${INpath}${INfileprefix}_R2_trimmed_RC_sort_unmapped2Hg.fastq | samtools view -@ 24 -bS | samtools sort -O bam -o ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort.bam
-bowtie2 -p 24 -t -k 100 -x ${DmelanogasterIndex} -1 ${INpath}${INfileprefix}_R1_trimmed_RC_sort_unmapped2Hg.fastq -2 ${INpath}${INfileprefix}_R2_trimmed_RC_sort_unmapped2Hg.fastq | samtools view -@ 24 -bS | samtools sort -O bam -o ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-K100_mapped2DM_sort.bam
-
-################# CONVERT SORT.BAM TO BEDGRAPGH, SORT, TO BIGWIG FOR VIEWING ##################
- bedtools genomecov -bg -ibam ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort.bam > ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM.bedgraph
-export LC_COLLATE=C
-sort -k1,1 -k2,2n ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM.bedgraph > ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort.bedgraph             
-bedGraphToBigWig ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort.bedgraph ~/assembly/contigs.size ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM.bigwig
-
-################ CONVERT SORT.BAM TO .BED FOR FILTERING THROUGH UNIQUE ASSEMBLY KMERS ################
-bedtools bamtobed -i ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort.bam > ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort.bed 
-
-################ CHECK INSERT SIZE ###############
-mkdir insert
-module load java
-module load picard
-java -Xmx10g -jar /isg/shared/apps/picard/picard-tools-2.9.2/picard.jar CollectInsertSizeMetrics \
-      I=${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort.bam \
-      O=${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort_insert_size_metrics.txt \
-      H=${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort_insert_size_histogram.pdf \
-      M=0.5
-################## FILTER MAPPED READS THROUGH MERYL UNIQUE ASSEMBLY KMERS ##################
-### Overlap .bed with Meryl unique 21mers:
-overlapSelect -overlapBases=21 /home/FCAM/aamjad/Meryl_kmers/dmel_assembly_21mer_SINGLEv1.3.meryl_merge.bed ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort.bed ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge.bed 
-
-### For 21mer overlaps: convert bed to bedgraph, sort, then to bigwig for viewing:
-bedtools genomecov -bg -i ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge.bed -g contigs.size > ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge.bedgraph
-        export LC_COLLATE=C
-    	sort -k1,1 -k2,2n ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge.bedgraph > ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge-sort.bedgraph
-        bedGraphToBigWig ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge-sort.bedgraph contigs.size ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge-sort.bigwig
-
-### Overlap .bed with Meryl unique 51mers:
-overlapSelect -overlapBases=51 /home/FCAM/aamjad/Meryl_kmers/dmel_assembly_51mer_SINGLEv1.3.meryl_merge.bed ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_mapped2DM_sort.bed ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq51mer-merge.bed 
-
-### For 51mer overlaps: convert bed to bedgraph, sort, then to bigwig for viewing:
-bedtools genomecov -bg -i ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge.bed -g contigs.size > ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge.bedgraph
-        export LC_COLLATE=C
-    	sort -k1,1 -k2,2n ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq51mer-merge.bedgraph > ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq51mer-merge-sort.bedgraph
-        bedGraphToBigWig ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq51mer-merge-sort.bedgraph contigs.size ${OUTpath}${INfileprefix}_trimmed_RC_sort_BT2-Df_F_1548_OVER_Meryl_uniq51mer-merge-sort.bigwig
 ## K100 Pipeline ##
 ###################
 #RC: 
