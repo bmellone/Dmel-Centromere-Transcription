@@ -18,59 +18,83 @@ module load fastqc
 module load bowtie2/2.3.5.1
 module load samtools/1.16.1
 module load bedtools
-module load ucsc_genome
-module load GenomeBrowser/20180626 
-mkdir fastq_Trim
-
-INpath=/path/to/input/directory/
-INfileprefix=SAMPLE1
-DmelanogasterIndex=/labs/Mellone/Asna/Assembly/bowtie2_Index/dmel_scaffold2_plus0310.fasta
-HumangenomeIndex=/isg/shared/databases/alignerIndex/animal/hg38_ucsc/hg38_bowtie2/Human_genome
-OUTpath=/path/to/output/directory/
+module load ucsc_genome 
 
 ################## PRE-PROCESSING ##################
 fastqc ${INpath}${INfileprefix}.fastq
 cutadapt -j 24 -q 20 -m 100 -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCA -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT -o ${INpath}${INfileprefix}_R1_trimmed.fastq -p $ {INpath}${INfileprefix}_R2_trimmed.fastq ${INpath}${INfileprefix}_R1.fastq ${INpath}${INfileprefix}_R2.fastq
 fastqc ${INpath}${INfileprefix}_trimmed.fastq
 
-################## MAPPING TO DROSOPHILA HET-ENRICHED ASSEMBLY (BT2 DF & BT2 K100) ##################
-bowtie2 -p 24 -t -x ${DmelanogasterIndex} -1 ${INpath}${INfileprefix}_R1_trimmed.fastq -2 ${INpath}${INfileprefix}_R2_trimmed.fastq | samtools view -@ 24 -bS | samtools sort -O bam -o ${OUTpath}${INfileprefix}_trimmed_BT2-Df_mapped2DM_sort.bam
-bowtie2 -p 24 -t -k 100 -x ${DmelanogasterIndex} -1 ${INpath}${INfileprefix}_R1_trimmed_RC_sort_unmapped2Hg.fastq -2 ${INpath}${INfileprefix}_R2_trimmed_RC_sort_unmapped2Hg.fastq | samtools view -@ 24 -bS | samtools sort -O bam -o ${OUTpath}${INfileprefix}_trimmed_BT2-K100_mapped2DM_sort.bam
+#### Bowtie2 Df Mapping ####
+############################
+bowtie2 -p 24 -t -x $REF -1 Emb_RNAseq_R1_trimmed.fastq.gz -2 Emb_RNAseq_R2_trimmed.fastq.gz | \
+        samtools view -@ 24 -F 1548 -bS | samtools sort -O bam -o \
+        RNAseq-sample_cutadapt-q20-m100_BT2-Df-Dmel-F1548_sort.bam
 
-################# CONVERT SORT.BAM TO BEDGRAPGH, SORT, TO BIGWIG FOR VIEWING ##################
-bedtools genomecov -bg -ibam ${OUTpath}${INfileprefix}_trimmed_BT2-Df_mapped2DM_sort.bam > ${OUTpath}${INfileprefix}_trimmed_BT2-Df_mapped2DM.bedgraph
+#### Bowtie2 K-100 Mapping ####
+###############################
+bowtie2 -p 24 -t -k 100 -x $REF -1 Emb_RNAseq_R1_trimmed.fastq.gz -2 Emb_RNAseq_R2_trimmed.fastq.gz | \
+        samtools view -@ 24 -F 1548 -bS | samtools sort -O bam -o \
+        RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_sort.bam
+
+#### Split Bt2 Df Files ####
+############################
+
+bedtools genomecov -bg -split -strand + -ibam RNAseq-sample_cutadapt-q20-m100_BT2-Df-Dmel-F1548_sort.bam contigs.size RNAseq-sample_cutadapt-q20-m100_BT2-Df-Dmel-F1548_plus.bedgraph
+bedtools genomecov -bg -split -strand - -ibam RNAseq-sample_cutadapt-q20-m100_BT2-Df-Dmel-F1548_sort.bam contigs.size RNAseq-sample_cutadapt-q20-m100_BT2-Df-Dmel-F1548_minus.bedgraph
+
+awk '{ $4=$4*-1; print }' RNAseq-sample_cutadapt-q20-m100_BT2-Df-Dmel-F1548_minus.bedgraph > RNAseq-sample_cutadapt-q20-m100_BT2-Df-Dmel-F1548_minus_mod.bedgraph
+
 export LC_COLLATE=C
-sort -k1,1 -k2,2n ${OUTpath}${INfileprefix}_trimmed_BT2-Df_mapped2DM.bedgraph > ${OUTpath}${INfileprefix}_trimmed_BT2-Df_mapped2DM_sort.bedgraph             
-bedGraphToBigWig ${OUTpath}${INfileprefix}_trimmed_BT2-Df_mapped2DM_sort.bedgraph ~/assembly/contigs.size ${OUTpath}${INfileprefix}_trimmed_BT2-Df_mapped2DM.bigwig
+sort -k1,1 -k2,2n RNAseq-sample_cutadapt-q20-m100_BT2-Df-Dmel-F1548_plus.bedgraph > RNAseq-sample_cutadapt-q20-m100_BT2-Df-Dmel-F1548_plus_sort.bedgraph
+sort -k1,1 -k2,2n RNAseq-sample_cutadapt-q20-m100_BT2-Df-Dmel-F1548_minus_mod.bedgraph > RNAseq-sample_cutadapt-q20-m100_BT2-Df-Dmel-F1548_minus_mod_sort.bedgraph
 
-################ CONVERT SORT.BAM TO .BED FOR FILTERING THROUGH UNIQUE ASSEMBLY KMERS ################
-bedtools bamtobed -i ${OUTpath}${INfileprefix}_trimmed_BT2-Df_mapped2DM_sort.bam > ${OUTpath}${INfileprefix}_trimmed_BT2-Df_mapped2DM_sort.bed 
+bedGraphToBigWig RNAseq-sample_cutadapt-q20-m100_BT2-Df-Dmel-F1548_plus_sort.bedgraph contigs.size RNAseq-sample_cutadapt-q20-m100_BT2-Df-Dmel-F1548_plus.bigwig
+bedGraphToBigWig RNAseq-sample_cutadapt-q20-m100_BT2-Df-Dmel-F1548_minus_sort.bedgraph contigs.size RNAseq-sample_cutadapt-q20-m100_BT2-Df-Dmel-F1548_minus.bigwig
 
-################ CHECK INSERT SIZE ###############
-mkdir insert
-module load java
-module load picard
-java -Xmx10g -jar /isg/shared/apps/picard/picard-tools-2.9.2/picard.jar CollectInsertSizeMetrics \
-      I=${OUTpath}${INfileprefix}_trimmed_BT2-Df_mapped2DM_sort.bam \
-      O=${OUTpath}${INfileprefix}_trimmed_BT2-Df_mapped2DM_sort_insert_size_metrics.txt \
-      H=${OUTpath}${INfileprefix}_trimmed_BT2-Df_mapped2DM_sort_insert_size_histogram.pdf \
-      M=0.5
-      
-################## FILTER MAPPED READS THROUGH MERYL UNIQUE ASSEMBLY KMERS ##################
-### Overlap .bed with Meryl unique 21mers:
-overlapSelect -overlapBases=21 /home/FCAM/aamjad/Meryl_kmers/dmel_assembly_21mer_SINGLEv1.3.meryl_merge.bed ${OUTpath}${INfileprefix}_trimmed_BT2-Df_mapped2DM_sort.bed ${OUTpath}${INfileprefix}_trimmed_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge.bed 
+#### Split Bt2 K-100 Files ####
+###############################
 
-### For 21mer overlaps: convert bed to bedgraph, sort, then to bigwig for viewing:
-bedtools genomecov -bg -i ${OUTpath}${INfileprefix}_trimmed_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge.bed -g contigs.size > ${OUTpath}${INfileprefix}_trimmed_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge.bedgraph
-        export LC_COLLATE=C
-    	sort -k1,1 -k2,2n ${OUTpath}${INfileprefix}_trimmed_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge.bedgraph > ${OUTpath}${INfileprefix}_trimmed_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge-sort.bedgraph
-        bedGraphToBigWig ${OUTpath}${INfileprefix}_trimmed_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge-sort.bedgraph contigs.size ${OUTpath}${INfileprefix}_trimmed_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge-sort.bigwig
+bedtools genomecov -bg -split -strand + -ibam RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_sort.bam contigs.size RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F154$
+bedtools genomecov -bg -split -strand - -ibam RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_sort.bam contigs.size RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F154$
 
-### Overlap .bed with Meryl unique 51mers:
-overlapSelect -overlapBases=51 /home/FCAM/aamjad/Meryl_kmers/dmel_assembly_51mer_SINGLEv1.3.meryl_merge.bed ${OUTpath}${INfileprefix}_trimmed_BT2-Df_mapped2DM_sort.bed ${OUTpath}${INfileprefix}_trimmed_BT2-Df_F_1548_OVER_Meryl_uniq51mer-merge.bed 
+awk '{ $4=$4*-1; print }' RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_minus.bedgraph > RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_minus_mod.bedgraph
 
-### For 51mer overlaps: convert bed to bedgraph, sort, then to bigwig for viewing:
-bedtools genomecov -bg -i ${OUTpath}${INfileprefix}_trimmed_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge.bed -g contigs.size > ${OUTpath}${INfileprefix}_trimmed_BT2-Df_F_1548_OVER_Meryl_uniq21mer-merge.bedgraph
-        export LC_COLLATE=C
-    	sort -k1,1 -k2,2n ${OUTpath}${INfileprefix}_trimmed_BT2-Df_F_1548_OVER_Meryl_uniq51mer-merge.bedgraph > ${OUTpath}${INfileprefix}_trimmed_BT2-Df_F_1548_OVER_Meryl_uniq51mer-merge-sort.bedgraph
-        bedGraphToBigWig ${OUTpath}${INfileprefix}_trimmed_BT2-Df_F_1548_OVER_Meryl_uniq51mer-merge-sort.bedgraph contigs.size ${OUTpath}${INfileprefix}_trimmed_BT2-Df_F_1548_OVER_Meryl_uniq51mer-merge-sort.bigwig
+export LC_COLLATE=C
+sort -k1,1 -k2,2n RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_plus.bedgraph > RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_plus_sort.bedgraph
+sort -k1,1 -k2,2n RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_minus_mod.bedgraph > RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_minus_mod_sort.bedgraph
+
+bedGraphToBigWig RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_plus_sort.bedgraph contigs.size RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_plus.bigwig
+bedGraphToBigWig RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_minus_sort.bedgraph contigs.size RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_minus.bigwig
+
+bedtools bamtobed -i RNAseq-sample_cutadapt-q20-m100_BT2-Df-Dmel-F1548_sort.bam > RNAseq-sample_cutadapt-q20-m100_BT2-Df-Dmel-F1548.bed
+bedtools bamtobed -i RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_sort.bam > RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548.bed
+
+#### Overlap 51-mer Meryl ####
+##############################
+
+overlapSelect -overlapBases=51 /home/FCAM/aamjad/Meryl_kmers_new/dmel_assembly_51mer_SINGLEv1.3.meryl_merge.bed RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548.bed \
+        RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge.bed
+#### Split K100 filtered Files ####
+###################################
+
+awk '$6 == "+"' RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge.bed | genomeCoverageBed -i contigs.size > \
+        RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_plus.bedgraph
+awk '$6 == "-"' RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge.bed | genomeCoverageBed -i contigs.size > \
+        RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_minus.bedgraph
+
+awk '{ $4=$4*-1; print }' RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_minus.bedgraph > \
+        RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_minus_mod.bedgraph
+
+export LC_COLLATE=C
+sort -k1,1 -k2,2n RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_plus.bedgraph > \
+        RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_plus_sort.bedgraph
+
+sort -k1,1 -k2,2n RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_minus_mod.bedgraph > \
+        RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_minus_sort.bedgraph
+
+bedGraphToBigWig RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_plus_sort.bedgraph contigs.size \
+        RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_plus.bigwig
+
+bedGraphToBigWig RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_plus_minus.bedgraph contigs.size \
+        RNAseq-sample_cutadapt-q20-m100_BT2-k100-Dmel-F1548_OVER_Meryl_uniq51mer_Dmel-merge_minus.bigwig
