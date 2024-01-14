@@ -1,17 +1,6 @@
-#!/bin/bash
-#SBATCH --job-name=Align2dmel
-#SBATCH -n 1
-#SBATCH -N 1
-#SBATCH -c 24
-#SBATCH --mem=150G
-#SBATCH --partition=general
-#SBATCH --qos=general
-#SBATCH --mail-type=ALL
-#SBATCH --mail-user=asna.amjad@uconn.edu
-#SBATCH -o %x_%j.out
-#SBATCH -e %x_%j.err
-
-echo `hostname`
+## RNA-seq Pipeline to Map with BT2 Df, BT2 k100, and BT2 k100 (51mer Filetered) for 0-12h embryos ###
+### Same pipeline used to map RNA-seq brains data ###
+######################################################################################################
 
 module load cutadapt
 module load fastqc
