@@ -75,26 +75,24 @@ export LC_COLLATE=C
 bedGraphToBigWig PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_plus_sort.bedgraph contigs.size PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_plus.bigwig
 bedGraphToBigWig PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_minus_sort.bedgraph contigs.size PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_minus.bigwig  
 
-## K100 Pipeline ##
-###################
-#RC: 
-#seqkit seq --reverse --complement ProSeq_5_R1_Trim.fastq.gz > PROseq_Trim_R1_RC.fastq.gz
+### Bowtie2 K100 Pipeline ###
+#############################
+### Reverse Complement
+seqkit seq --reverse --complement ProSeq_5_R1_Trim.fastq.gz > PROseq_Trim_R1_RC.fastq.gz
+### Align to Hg28 genome 
+bowtie2 -p 24 -t --very-sensitive -x fastq_Trim/AlignProSeqDec23/hg38_bowtie2/Human_genome \
+       -U PROseq_Trim_R1_RC.fastq.gz | samtools view -@ 24 -bS | \
+       samtools sort -@ 24 -m 3G -O bam -o PROseq_Trim_R1_RC_BT2-vs-Hg_sort.bam
 
-#Map: 
-#bowtie2 -p 24 -t --very-sensitive -x /labs/Mellone/Asna/ProSeq_New_Mapping/fastq_Trim/AlignProSeqDec23/hg38_bowtie2/Human_genome \
-#       -U PROseq_Trim_R1_RC.fastq.gz | samtools view -@ 24 -bS | \
-#       samtools sort -@ 24 -m 3G -O bam -o PROseq_Trim_R1_RC_BT2-vs-Hg_sort.bam
+### Pull out UNMAPPED PROseq reads only from sort.bam and convert to fastq
+samtools view -@ 24 -b -f 4 -o PROseq_Trim_R1_RC_BT2-vs-Hg_sort_unmapped.bam PROseq_Trim_R1_RC_BT2-vs-Hg_sort.bam
+samtools fastq -@ 24 PROseq_Trim_R1_RC_BT2-vs-Hg_sort_unmapped.bam > PROseq_Trim_R1_RC_BT2-vs-Hg_sort_unmapped.fastq
 
-##Pull out UNMAPPED PROseq reads only from sort.bam and convert to fastq:
-    ##Usage: (-f 4) results in retaining only those reads that did NOT map to Human genome 
+### Map to Drosophila
+bowtie2 -p 24 -t -k 100 -x /labs/Mellone/Asna/Assembly/bt2_Index/dmel_scaffold2_plus0310.fasta \
+       -U PROseq_Trim_R1_RC_BT2-vs-Hg_sort_unmapped.fastq | \
+       samtools view -@ 24 -bS | samtools sort -@ 24 -m 3G -O bam -o PROseq_Trim_RC_R1_bt2-k100-Dmel_sort.bam
 
-#samtools view -@ 24 -b -f 4 -o PROseq_Trim_R1_RC_BT2-vs-Hg_sort_unmapped.bam PROseq_Trim_R1_RC_BT2-vs-Hg_sort.bam
-#samtools fastq -@ 24 PROseq_Trim_R1_RC_BT2-vs-Hg_sort_unmapped.bam > PROseq_Trim_R1_RC_BT2-vs-Hg_sort_unmapped.fastq
+### sort.bam to bed: 
+bedtools bamtobed -i PROseq_Trim_RC_R1_bt2-k100-Dmel_sort.bam > PROseq_Trim_RC_R1_bt2-k100-Dmel.bed
 
-# Map to Drosophila
-#bowtie2 -p 24 -t -k 100 -x /labs/Mellone/Asna/Assembly/bt2_Index/dmel_scaffold2_plus0310.fasta \
-#       -U PROseq_Trim_R1_RC_BT2-vs-Hg_sort_unmapped.fastq | \
-#       samtools view -@ 24 -bS | samtools sort -@ 24 -m 3G -O bam -o PROseq_Trim_R1_bt2-k100-Dmel_sort.bam
-
-# sort.bam to bed: 
-#bedtools bamtobed -i PROseq_Trim_R1_bt2-k100-Dmel_sort.bam > PROseq_Trim_R1_bt2-k100-Dmel.bed
