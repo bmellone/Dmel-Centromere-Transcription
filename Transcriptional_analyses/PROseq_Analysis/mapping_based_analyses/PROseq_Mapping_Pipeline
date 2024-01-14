@@ -31,53 +31,44 @@ OUTpath=/path/to/output/directory/
 fastqc ${INpath}${INfileprefix}.fastq
 cutadapt -j 24 -q 20 -m 20 -a TGGAATTCTCGGGTGCCAAGG -A GATCGTCGGACTGTAGAACTCTGAAC -o ${INpath}${INfileprefix}_R1_trim.fastq.gz -p $ {INpath}${INfileprefix}_R2_Trim.fastq.gz \
   ${INpath}${INfileprefix}_R1.fastq.gz ${INpath}${INfileprefix}_R2.fastq.gz
-fastqc ${INpath}${INfileprefix}_trimmed.fastq
-fastx_reverse_complement -Q33 -v -i ${INpath}${INfileprefix}_R1_trimmed.fastq -o ${INpath}${INfileprefix}_R1_trimmed_RC.fastq
-fastx_reverse_complement -Q33 -v -i ${INpath}${INfileprefix}_R2_trimmed.fastq -o ${INpath}${INfileprefix}_R2_trimmed_RC.fastq
+
 ################## FILTERING OUT HeLa Cells SPIKE-INS IN PROSEQ DATA ONLY ##################
+bowtie2 -p 24 -t -x Dmel_hg38_combine -1 fastq_Trim/ProSeq_5_R1_Trim.fastq.gz \
+       -2 fastq_Trim/ProSeq_5_R2_Trim.fastq.gz | \
+       samtools view -@ 24 -F 1548 -bS | \
+       samtools sort -@ 24 -m 3G -O bam -o PROseq_Emb_BT2_Df_CombineHgDmel_sort.bam
 
-bowtie2 -p 24 -t --very-sensitive -x ${HumangenomeIndex} -1 ${INpath}${INfileprefix}_R1_trimmed_RC.fastq -2 ${INpath}${INfileprefix}_R2_trimmed_RC.fastq | samtools view -@ 24 -bS | samtools sort -O bam -o ${INpath}${INfileprefix}_trimmed_RC_BT2-vs-Hg_sort.bam
+(samtools view -@ 24 -H PROseq_Emb_BT2_Df_CombineHgDmel_sort.bam
+samtools view -@ 24 PROseq_Emb_BT2_Df_CombineHgDmel_sort.bam | grep -f contigs.txt) | \
+samtools view -@ 24 -b > PROseq_Emb_BT2_Df_Dmel_sort.bam
 
+## Step 1: Get concordantly aligned reads
+samtools view -@ 24 -hf 0x2 PROseq_Emb_BT2_Df_Dmel_sort.bam |
+awk '($1 ~/^@/ || $2==99 || $2==147)' |
+samtools sort -n -@ 24 |
+bedtools bamtobed -bedpe -i stdin |
+awk '{OFS="\t"} {print $1,$2,$6,$7,$8,"-"}' > PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk.bed
+samtools view -@ 24 -hf 0x2 PROseq_Emb_BT2_Df_Dmel_sort.bam |
+awk '($1 ~/^@/ || $2==83 || $2==163)' |
+samtools sort -n -@ 24 |
+bedtools bamtobed -bedpe -i stdin |
+awk '{OFS="\t"} {print $1,$2,$6,$7,$8,"+"}' >> PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk.bed
 
-#bowtie2 -p 24 -t -x Dmel_hg38_combine -1 /labs/Mellone/Asna/ProSeq_New_Mapping/fastq_Trim/ProSeq_5_R1_Trim_RevComp.fastq.gz \
-#       -2 /labs/Mellone/Asna/ProSeq_New_Mapping/fastq_Trim/ProSeq_5_R2_Trim_RevComp.fastq.gz | \
-#       samtools view -@ 24 -F 1548 -bS | \
-#       samtools sort -@ 24 -m 3G -O bam -o PROseq_Emb_RevComp_BT2_Df_CombineHgDmel_sort.bam
-
-#samtools view -@ 24 -hf 0x2 PROseq_Emb_BT2_Df_Dmel_sort.bam |
- #   awk '($1 ~/^@/ || $2==99 || $2==147)' |
-  #  samtools sort -n -@ 24 |
-   # bedtools bamtobed -bedpe -i stdin |
-    #awk '{OFS="\t"} {print $1,$2,$6,$7,$8,"-"}' > PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk.bed
-    #samtools view -@ 24 -hf 0x2 PROseq_Emb_BT2_Df_Dmel_sort.bam |
-    #awk '($1 ~/^@/ || $2==83 || $2==163)' |
-    #samtools sort -n -@ 24 |
-    #bedtools bamtobed -bedpe -i stdin |
-    #awk '{OFS="\t"} {print $1,$2,$6,$7,$8,"+"}' >> PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk.bed
-
-
- ### Step 3b: Get 3' ends per pair (position of polymerase) & convert to bedgraph
-        ##Get single-bp coords (start of R1):
-          # cat PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk.bed |
-           #awk '{OFS="\t"} $6=="+" {print $1,($3-1),$3,$4,$5"_"($3-$2),$6}; $6=="-" {print $1,$2,($2+1),$4,$5"_"($3-$2),$6}' |
-           #sort --parallel 12 -k1,1 -k2,2n > PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends.bed
-        ##Convert to bedgraph:
-            awk '$6 == "+"' PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends.bed | genomeCoverageBed -3 -i /dev/stdin -bg -g contigs.size > \
-                                PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_plus.bedgraph
-            awk '$6 == "-"' PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends.bed | genomeCoverageBed -3 -i /dev/stdin -bg -g contigs.size > \
-                                PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_m.bedgraph
-            awk '{OFS="\t"}{ $4=$4*-1; print }' PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_m.bedgraph > \
-                                PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_minus.bedgraph
+Step 2: Get 3' ends per pair (position of polymerase) & convert to bedgraph
+cat PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk.bed |
+    awk '{OFS="\t"} $6=="+" {print $1,($3-1),$3,$4,$5"_"($3-$2),$6}; $6=="-" {print $1,$2,($2+1),$4,$5"_"($3-$2),$6}' |
+    sort --parallel 12 -k1,1 -k2,2n > PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends.bed
+##Convert to bedgraph:
+awk '$6 == "+"' PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends.bed | genomeCoverageBed -3 -i /dev/stdin -bg -g contigs.size > \
+    PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_plus.bedgraph
+awk '$6 == "-"' PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends.bed | genomeCoverageBed -3 -i /dev/stdin -bg -g contigs.size > \
+    PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_m.bedgraph
+awk '{OFS="\t"}{ $4=$4*-1; print }' PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_m.bedgraph > \
+    PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_minus.bedgraph
 
 export LC_COLLATE=C
-        sort -k1,1 -k2,2n PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_plus.bedgraph > PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_plus_sort.bedgraph
-        sort -k1,1 -k2,2n PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_minus.bedgraph > PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_minus_sort.bedgraph
-
-
-#(samtools view -@ 24 -H New/PROseq_Emb_BT2_Df_CombineHgDmel_sort.bam
-#samtools view -@ 24 New/PROseq_Emb_BT2_Df_CombineHgDmel_sort.bam | grep -f contigs.txt) | \
-#samtools view -@ 24 -b > PROseq_Emb_BT2_Df_Dmel_sort.bam
-
+    sort -k1,1 -k2,2n PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_plus.bedgraph > PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_plus_sort.bedgraph
+    sort -k1,1 -k2,2n PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_minus.bedgraph > PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_minus_sort.bedgraph
 bedGraphToBigWig PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_plus_sort.bedgraph contigs.size PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_plus.bigwig
 bedGraphToBigWig PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_minus_sort.bedgraph contigs.size PROseq_Emb_BT2_Df_Dmel_nameSort_withAwk_3ends_minus.bigwig  
 
