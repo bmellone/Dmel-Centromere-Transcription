@@ -1,17 +1,5 @@
-#!/bin/bash
-#SBATCH --job-name=cutntag
-#SBATCH -n 1
-#SBATCH -N 1
-#SBATCH -c 16
-#SBATCH --mem=100G
-#SBATCH --partition=general
-#SBATCH --qos=general
-#SBATCH --mail-type=ALL
-#SBATCH --mail-user=asna.amjad@uconn.edu
-#SBATCH -o %x_%j.out
-#SBATCH -e %x_%j.err
-
-echo `hostname`
+## CUT&Tag Pipeline to Map with Bowtie2 for 0-12h embryos ###
+#############################################################
 
 module load TrimGalore/0.6.7 cutadapt htseq
 module load bowtie2
