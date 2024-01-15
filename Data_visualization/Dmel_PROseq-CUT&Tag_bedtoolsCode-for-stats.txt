@@ -31,7 +31,16 @@ bedtools coverage -counts -sorted -a Jockey3_Dmel.bed -g contigs_sort.size -b PR
 ```
 bedtools coverage -counts -sorted -a CENPA-domains_CEN-nonCEN_Dmel.bed -g contigs_sort.size -b PROseq_3ends.bed > CENPA-domains_CEN-nonCEN_Dmel_COVcounts_PROseq_3ends.bed
 ```
+- Only applied to Bowtie 2 default "best match".
 - Results reported in Table S4.
+
+### PRO-seq reads per nonCENP-A associated random intervals ###
+```
+bedtools random -l 773 -n 333 -g contigs_sort.size  > Dmel_randomIntervals-l773-n333.bed
+bedtools coverage -a Dmel_randomIntervals-l773-n333.bed -b PROseq_3ends.bed > Dmel_randomIntervals-l773-n333_COV_PROseq_3ends.bed
+```
+- Only applied to Bowtie 2 default "best match".
+- Generation of 333 random intervals of 773bp in length followed by read counts per.
 
 ### Unique 21-mer coverage per Jockey-3 ###
 ```
