@@ -1,20 +1,20 @@
-### DeepTools heatmap of RNA polymerase occupancy across genes ###
+### DeepTools heatmap of RNA polymerase occupancy across genes: genes scaled to the same size ###
 ```
-computeMatrix reference-point --referencePoint TSS -p 12 \
+computeMatrix scale-regions -p 12 \
 -R Dmel_genes_plus.bed \
 -S PROseq_3ends_minus.bigwig PROseq_3ends_plus.bigwig \
 -o Dmel_PROseq_PLUS_Genes.mat.gz \
--b 500 -a 5000 -bs 100 \
+-b 100 -a 100 -bs 10 \
 --averageTypeBins max \
 --missingDataAsZero
 #relabel:
 computeMatrixOperations relabel -m Dmel_PROseq_PLUS_Genes.mat.gz -o Dmel_PROseq_PLUS_Genes_rename.mat.gz --groupLabels "Genes"
 # minus strand regions
-computeMatrix reference-point --referencePoint TSS -p 12 \
+computeMatrix scale-regions -p 12 \
 -R Dmel_genes_neg.bed \
 -S PROseq_3ends_plus.bigwig PROseq_3ends_minus.bigwig \
 -o Dmel_PROseq_MINUS_Genes.mat.gz \
--b 500 -a 5000 -bs 100 \
+-b 100 -a 100 -bs 10 \
 --averageTypeBins max \
 --missingDataAsZero
 # relabel:
@@ -23,13 +23,16 @@ computeMatrixOperations relabel -m Dmel_PROseq_MINUS_Genes.mat.gz -o Dmel_PROseq
 computeMatrixOperations rbind -m Dmel_PROseq_MINUS_Genes_rename.mat.gz Dmel_PROseq-dflt-V2_MINUS_Genes_mycode_rename.mat.gz Dmel_PROseq_OUT_Genes_rename.mat.gz
 # create heatmap
 plotHeatmap -m Dmel_PROseq_OUT_Genes_rename.mat.gz --sortUsing region_length \
--o Dmel_PROseq_OUT_Genes_b500_a5000_bs100_SE.htmp.pdf \
---dpi 800 --plotType se \
+-o Dmel_PROseq_OUT_Genes_b100_a100_bs10.htmp.pdf \
+--dpi 800 \
 --colorMap Blues Reds \
 --averageTypeSummaryPlot mean \
 --samplesLabel "Antisense" "Sense" \
 --heatmapHeight 15 --heatmapWidth 4 \
---zMin 0 --yMin 0
+--zMin 0 --yMin 0 --zMax 9
 ```
-- Only applied to Bowtie 2 default "best match".
+
+- Applied to Bowtie 2 default "best match" and Bowtie 2 default "best match" (de-duplicated).
 - Results shown in Fig. S1.
+
+
