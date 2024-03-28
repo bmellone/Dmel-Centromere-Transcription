@@ -6,7 +6,8 @@ Other tools and codes used are listed here: (Links will be added)
 
 Meryl-associated code and unique kmer:
 Meryl unique Dmel assembly 21mers and 51mers:
-Assembly and annotations: (Links will be added)
+Assembly and annotations:
+
 
 
 Drosophila heterochromatin assembly (PLoS Bio paper 2019)
