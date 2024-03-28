@@ -1,8 +1,27 @@
 ## Drosophila melaongaster PRO-seq and CUT&Tag post-alignment code for statistical analyses ##
 
+### De-dup (removal of duplicate) PRO-seq reads ###
+```
+module load picard/2.9.2
+echo -e "Marking duplicates"
+java -jar /isg/shared/apps/picard/picard-tools-2.9.2/picard.jar MarkDuplicates \
+TAGGING_POLICY=All \
+REMOVE_DUPLICATES=false \
+OPTICAL_DUPLICATE_PIXEL_DISTANCE=100 \
+I=PROseq_Emb_BT2_Df_Dmel_sort.bam
+O=PROseq_Emb_BT2_Df_Dmel_markDups.bam
+M=PROseq_Emb_BT2_Df_Dmel_markDups.txt
+echo -e "Finished marking duplicates"
+echo -e "Generating bam file without duplicate reads"
+samtools view -bhF 0x400 -@ 12 PROseq_Emb_BT2_Df_Dmel_markDups.bam > PROseq_Emb_BT2_Df_Dmel_noDupReads.bam
+echo -e "Generating bam file containing only duplicate reads"
+samtools view -bhf 0x400 -@ 12 PROseq_Emb_BT2_Df_Dmel_markDups.bam > PROseq_Emb_BT2_Df_Dmel_dupReadsOnly.bam
+```
+- Following the above code, proceeded into retrival of concordant pairs and then generation of 3' end PRO-seq bed (for below) and bigwig files (for tracks). 
+
 ### Label Jockey-3 copies with CENP-A and CEN designations ###
 ```
-bedtools map -c 4 -o collapse -a Jockey3_Dmel.bed -g contigs_sort.size -b CENPA-domains_CEN-nonCEN_Dmel.bed > 
+bedtools map -c 4 -o collapse -a Jockey3_Dmel.bed -g contigs_sort.size -b CENPA-domains_CEN-nonCEN_Dmel.bed > Jockey3_Dmel_CENPA-domains_CEN-nonCEN_Dmel.bed
 ```
 - Wherein, column (-c) 4 is CENP-A/CEN designation (CENP-A-CEN, CENP-A-nonCEN, or nonCENP-A).
 - Results reported in Table 1 and Table S1, and summarized in Table S6.
@@ -24,26 +43,92 @@ bedtools map -c 7 -o mean -a CENPA-domains_CEN-nonCEN_Dmel.bed -g contigs_sort.s
 ```
 bedtools coverage -counts -sorted -a Jockey3_Dmel.bed -g contigs_sort.size -b PROseq_3ends.bed > Jockey3_Dmel_COVcounts_PROseq_3ends.bed
 ```
-- Applied to all three mapping methods: Bowtie 2 default "best match", Bowtie k-100, Bowtie k-100 21-mer filtered.
+- Applied to all three mapping methods: Bowtie 2 default "best match" (de-duplicated), Bowtie k-100, Bowtie k-100 21-mer filtered.
 - Results reported in Table S1 and summarized in Table S5.
 
 ### PRO-seq reads per CENP-A domain ###
 ```
 bedtools coverage -counts -sorted -a CENPA-domains_CEN-nonCEN_Dmel.bed -g contigs_sort.size -b PROseq_3ends.bed > CENPA-domains_CEN-nonCEN_Dmel_COVcounts_PROseq_3ends.bed
 ```
-- Only applied to Bowtie 2 default "best match".
+- Only applied to Bowtie 2 default "best match" (de-duplicated).
 - Results reported in Table S4.
-
-### PRO-seq reads per nonCENP-A associated random intervals ###
-```
-bedtools random -l 773 -n 333 -g contigs_sort.size  > Dmel_randomIntervals-l773-n333.bed
-bedtools coverage -a Dmel_randomIntervals-l773-n333.bed -b PROseq_3ends.bed > Dmel_randomIntervals-l773-n333_COV_PROseq_3ends.bed
-```
-- Only applied to Bowtie 2 default "best match".
-- Generation of 333 random intervals of 773bp in length followed by read counts per.
 
 ### Unique 21-mer coverage per Jockey-3 ###
 ```
 bedtools coverage -a Jockey3_Dmel.bed -g contigs_sort.size -b Meryl-21mer-SINGLEv1.3_Dmel.bed > Jockey3_Dmel_COV_Meryl-21mer-SINGLEv1.3_Dmel.bed
 ```
 - Results reported in Table S1.
+
+### DeepTools heatmap of RNA polymerase occupancy across genes: genes aligned at 5' end (TSS) ###
+```
+computeMatrix reference-point --referencePoint TSS -p 12 \
+-R Dmel_genes_plus.bed \
+-S PROseq_3ends_minus.bigwig PROseq_3ends_plus.bigwig \
+-o Dmel_PROseq_PLUS_Genes.mat.gz \
+-b 500 -a 2500 -bs 10 \
+--averageTypeBins max \
+--missingDataAsZero
+#relabel:
+computeMatrixOperations relabel -m Dmel_PROseq_PLUS_Genes.mat.gz -o Dmel_PROseq_PLUS_Genes_rename.mat.gz --groupLabels "Genes"
+# minus strand regions
+computeMatrix reference-point --referencePoint TSS -p 12 \
+-R Dmel_genes_neg.bed \
+-S PROseq_3ends_plus.bigwig PROseq_3ends_minus.bigwig \
+-o Dmel_PROseq_MINUS_Genes.mat.gz \
+-b 500 -a 2500 -bs 10 \
+--averageTypeBins max \
+--missingDataAsZero
+# relabel:
+computeMatrixOperations relabel -m Dmel_PROseq_MINUS_Genes.mat.gz -o Dmel_PROseq_MINUS_Genes_rename.mat.gz --groupLabels "Genes"
+# combine plus and minus strand region matrices
+computeMatrixOperations rbind -m Dmel_PROseq_MINUS_Genes_rename.mat.gz Dmel_PROseq-dflt-V2_MINUS_Genes_mycode_rename.mat.gz Dmel_PROseq_OUT_Genes_rename.mat.gz
+# create heatmap
+plotHeatmap -m Dmel_PROseq_OUT_Genes_rename.mat.gz --sortUsing region_length \
+-o Dmel_PROseq_OUT_Genes_b500_a2500_bs10.htmp.pdf \
+--dpi 800 \
+--colorMap Blues Reds \
+--averageTypeSummaryPlot mean \
+--samplesLabel "Antisense" "Sense" \
+--heatmapHeight 15 --heatmapWidth 4 \
+--zMin 0 --yMin 0 --zMax 9
+```
+- Applied to Bowtie 2 default "best match" and Bowtie 2 default "best match" (de-duplicated).
+- Results shown in Fig. S1.
+
+### DeepTools heatmap of RNA polymerase occupancy across genes: genes scaled to the same size ###
+```
+computeMatrix scale-regions -p 12 \
+-R Dmel_genes_plus.bed \
+-S PROseq_3ends_minus.bigwig PROseq_3ends_plus.bigwig \
+-o Dmel_PROseq_PLUS_Genes.mat.gz \
+-b 100 -a 100 -bs 10 \
+--averageTypeBins max \
+--missingDataAsZero
+#relabel:
+computeMatrixOperations relabel -m Dmel_PROseq_PLUS_Genes.mat.gz -o Dmel_PROseq_PLUS_Genes_rename.mat.gz --groupLabels "Genes"
+# minus strand regions
+computeMatrix scale-regions -p 12 \
+-R Dmel_genes_neg.bed \
+-S PROseq_3ends_plus.bigwig PROseq_3ends_minus.bigwig \
+-o Dmel_PROseq_MINUS_Genes.mat.gz \
+-b 100 -a 100 -bs 10 \
+--averageTypeBins max \
+--missingDataAsZero
+# relabel:
+computeMatrixOperations relabel -m Dmel_PROseq_MINUS_Genes.mat.gz -o Dmel_PROseq_MINUS_Genes_rename.mat.gz --groupLabels "Genes"
+# combine plus and minus strand region matrices
+computeMatrixOperations rbind -m Dmel_PROseq_MINUS_Genes_rename.mat.gz Dmel_PROseq-dflt-V2_MINUS_Genes_mycode_rename.mat.gz Dmel_PROseq_OUT_Genes_rename.mat.gz
+# create heatmap
+plotHeatmap -m Dmel_PROseq_OUT_Genes_rename.mat.gz --sortUsing region_length \
+-o Dmel_PROseq_OUT_Genes_b100_a100_bs10.htmp.pdf \
+--dpi 800 \
+--colorMap Blues Reds \
+--averageTypeSummaryPlot mean \
+--samplesLabel "Antisense" "Sense" \
+--heatmapHeight 15 --heatmapWidth 4 \
+--zMin 0 --yMin 0 --zMax 9
+```
+
+- Applied to Bowtie 2 default "best match" and Bowtie 2 default "best match" (de-duplicated).
+- Results shown in Fig. S1.
+
